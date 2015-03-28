@@ -20,6 +20,9 @@ html lang=I18n.locale.to_s
     /[if lt IE 9]
       = javascript_include_tag '//oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js', 'respond.js'
 
+    javascript:
+        var STRAVA_ACCESS_TOKEN = '#{session[:strava_access_token]}';
+
   body
     == render 'shared/navbar'
 

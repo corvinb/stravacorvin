@@ -1,0 +1,99 @@
+# Place all the behaviors and hooks related to the matching controller here.
+# All this logic will automatically be available in application.js.
+# You can use CoffeeScript in this file: http://coffeescript.org/
+
+displayActivities = (data) ->
+    # data is filtered for runs.
+    displayAllRuns data
+    displayBuckets data
+
+displayAllRuns = (data) ->
+    window.activities = data
+    table = $('table#activities')
+    td = (s) -> '<td>' + s + '</td>'
+    th = (s) -> '<th>' + s + '</th>'
+    table.append '<thead><tr>' +
+        th('Date') +
+        th('Type') +
+        th('Name') +
+        th('Avg Speed') +
+        th('Distance') +
+        th('Elapsed Time') +
+        th('City') +
+        th('Moving Time') +
+        '</tr></thead>'
+    table.append '<tbody>'
+    $(data).each () ->
+        table.append '<tr>' +
+            td(@start_date_local) +
+            td(@type) +
+            td(@name) +
+            td(@average_speed) +
+            td(@distance) +
+            td(@elapsed_time) +
+            td(@location_city) +
+            td(@moving_time) +
+            '</tr>'
+    table.append '</tbody>'
+
+displayAllBuckets = (buckets, distances) ->
+    bucketDates = (bucketDate for bucketDate of buckets)
+    bucketDates.sort
+    table = $('table#buckets')
+    td = (s) -> '<td>' + s + '</td>'
+    th = (s) -> '<th>' + s + '</th>'
+    s = '<thead><tr>'
+    s += th(dist) for dist in distances
+    s += '</tr></thead>'
+    s += '<tbody>'
+    for bucketDate in bucketDates
+        bucket = buckets[bucketDate]
+        s += '<tr>'
+        for dist in distances
+            s += td(bucket[dist]) if bucket[dist]?
+        s += '</tr>'
+    s += '</tbody>'
+    table.append s
+
+displayBuckets = (runs) ->
+    buckets = {}
+    distances = {}
+    firstWeek = new Date(9999, 1)
+    lastWeek = new Date(0)
+    for run in runs
+        start = new Date(run.start_date_local)
+        sow = new Date(start.getFullYear(), start.getMonth(), start.getDate() - start.getDay())
+        firstWeek = sow if sow < firstWeek
+        lastWeek = sow if sow > lastWeek
+        bucket = buckets[sow] ?= {}
+        if run.best_efforts?
+            for beff in run.best_efforts
+                bucket[beff.distance] = beff.elapsed_time if not bucket[beff.distance]? or beff.elapsed_time < bucket[beff.distance]
+                distances[beff.distance] = true
+
+    distArray = (parseInt(distance,10) for distance of distances)
+    distArray.sort
+    displayAllBuckets buckets, distArray
+
+filterRuns = (activities) ->
+    activity for activity in activities when activity.type is "Run"
+
+getActivitiesDetails = (activitiesSummaries, callback) ->
+    requests = []
+    for activity in activitiesSummaries
+        ( ->
+            curActivity = activity
+            requests.push $.get "https://www.strava.com/api/v3/activities/" + activity.id, { access_token: STRAVA_ACCESS_TOKEN, include_all_efforts: true },
+                ((data) -> $.extend curActivity, data),
+                "jsonp"
+        )()
+    $.when.apply($, requests).done -> callback activitiesSummaries
+
+$(document).ready ->
+    if HISTORIES_INDEX?
+        if STRAVA_ACCESS_TOKEN
+            $.get "https://www.strava.com/api/v3/athlete/activities",
+                { access_token: STRAVA_ACCESS_TOKEN, per_page: 100 },
+                ((data) -> getActivitiesDetails filterRuns(data), ((activities) ->
+                    displayActivities(activities))),
+                "jsonp"

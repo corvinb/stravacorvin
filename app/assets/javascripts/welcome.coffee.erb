@@ -32,15 +32,15 @@ displayActivities = (data) ->
             td(@moving_time) +
             '</tr>'
 
-$(document).on "page:change", ->
-    $('#loginStrava').click ->
-        window.location = 'https://www.strava.com/oauth/authorize?client_id=<%=ENV['STRAVA_CLIENT_ID']%>&redirect_uri=' + encodeURIComponent(getOrigin() + '/stravaauth') + '&response_type=code&state=' + encodeURIComponent(getOrigin())
+$(document).ready ->
+    if WELCOME_INDEX?
+        $('#loginStrava').click ->
+            window.location = 'https://www.strava.com/oauth/authorize?client_id=<%=ENV['STRAVA_CLIENT_ID']%>&redirect_uri=' + encodeURIComponent(getOrigin() + '/stravaauth') + '&response_type=code&state=' + encodeURIComponent(getOrigin())
 
-    if STRAVA_ACCESS_TOKEN
-        $('#loggedInToStrava').removeClass 'hidden'
+        if STRAVA_ACCESS_TOKEN
+            $('#loggedInToStrava').removeClass 'hidden'
 
-        $.get "https://www.strava.com/api/v3/athlete/activities", { access_token: STRAVA_ACCESS_TOKEN, per_page: 10 }, ((data) -> displayActivities(data)),
-            "jsonp"
-    else
-        $('#loginToStrava').removeClass 'hidden'
-
+            $.get "https://www.strava.com/api/v3/athlete/activities", { access_token: STRAVA_ACCESS_TOKEN, per_page: 10 }, ((data) -> displayActivities(data)),
+                "jsonp"
+        else
+            $('#loginToStrava').removeClass 'hidden'
