@@ -1,0 +1,9 @@
+= form_for @ana do |f|
+  - if @ana.errors.any?
+    #error_explanation
+      h2 = "#{pluralize(@ana.errors.count, "error")} prohibited this ana from being saved:"
+      ul
+        - @ana.errors.full_messages.each do |message|
+          li = message
+
+  .actions = f.submit

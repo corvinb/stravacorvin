@@ -46,6 +46,7 @@ gem 'turbolinks'
 gem 'twbs_sass_rails'
 gem 'uglifier', '>= 1.3.0'
 gem 'angularjs-rails', '~> 1.2'
+gem 'chart-js-rails'
 
 group :development, :test do
   gem 'byebug'

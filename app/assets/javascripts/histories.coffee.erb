@@ -2,6 +2,9 @@
 # All this logic will automatically be available in application.js.
 # You can use CoffeeScript in this file: http://coffeescript.org/
 
+bucketLabel = (date) ->
+    new Date(date).toLocaleDateString('en-us', { month: 'numeric', day: 'numeric' })
+
 displayActivities = (data) ->
     # data is filtered for runs.
     displayAllRuns data
@@ -36,64 +39,149 @@ displayAllRuns = (data) ->
             '</tr>'
     table.append '</tbody>'
 
-displayAllBuckets = (buckets, distances) ->
+# Buckets
+displayMonthly = true
+monthlyBuckets = {}
+weeklyBuckets = {}
+
+# Called repeatedly when run details are updated
+displayAllBuckets = (unused, distances) ->
+    buckets = if displayMonthly then monthlyBuckets else weeklyBuckets
     bucketDates = (bucketDate for bucketDate of buckets)
     bucketDates.sort
     table = $('table#buckets')
+    table.empty()
     td = (s) -> '<td>' + s + '</td>'
     th = (s) -> '<th>' + s + '</th>'
     s = '<thead><tr>'
+    s += th('Bucket')
     s += th(dist) for dist in distances
     s += '</tr></thead>'
     s += '<tbody>'
     for bucketDate in bucketDates
         bucket = buckets[bucketDate]
         s += '<tr>'
+        s += td bucketLabel(bucketDate)
         for dist in distances
             s += td(bucket[dist]) if bucket[dist]?
         s += '</tr>'
     s += '</tbody>'
     table.append s
 
+detailsUpdated = false
+
+# Called repeatedly when a run details is received.
 displayBuckets = (runs) ->
-    buckets = {}
+    return unless detailsUpdated
+
+    updateBucket = (bucket, beff) ->
+        bucket[beff.distance] = beff.elapsed_time if not bucket[beff.distance]? or beff.elapsed_time < bucket[beff.distance]
+
     distances = {}
-    firstWeek = new Date(9999, 1)
-    lastWeek = new Date(0)
+    #firstWeek = new Date(9999, 1)
+    #lastWeek = new Date(0)
     for run in runs
         start = new Date(run.start_date_local)
+
         sow = new Date(start.getFullYear(), start.getMonth(), start.getDate() - start.getDay())
-        firstWeek = sow if sow < firstWeek
-        lastWeek = sow if sow > lastWeek
-        bucket = buckets[sow] ?= {}
+        #firstWeek = sow if sow < firstWeek
+        #lastWeek = sow if sow > lastWeek
+        weeklyBucket = weeklyBuckets[sow] ?= {}
+
+        som = new Date(start.getFullYear(), start.getMonth())
+        monthlyBucket = monthlyBuckets[som] ?= {}
+
         if run.best_efforts?
             for beff in run.best_efforts
-                bucket[beff.distance] = beff.elapsed_time if not bucket[beff.distance]? or beff.elapsed_time < bucket[beff.distance]
-                distances[beff.distance] = true
+                if beff.distance < 22000
+                    updateBucket weeklyBucket, beff
+                    updateBucket monthlyBucket, beff
+                    distances[beff.distance] = true
 
     distArray = (parseInt(distance,10) for distance of distances)
     distArray.sort
-    displayAllBuckets buckets, distArray
+    displayAllBuckets null, distArray
+    displayChart null, distArray
+    detailsUpdated = false
+
+# Chart
+chart = null
+
+displayChart = (unused, distances) ->
+    buckets = if displayMonthly then monthlyBuckets else weeklyBuckets
+    bucketDates = (bucketDate for bucketDate of buckets)
+    bucketDates.sort (a,b) -> new Date(a) - new Date(b)
+
+    data =
+        labels: (bucketLabel(bd) for bd in bucketDates)
+        datasets: []
+
+    rgba = (r,g,b,a) ->
+        "rgba(" + r + "," + g + "," + b + "," + a + ")"
+    graya = (g,a) -> rgba g, g, g, a
+
+    fillEmptyData = (data, index) ->
+        16 * 60 if data.length <= index
+        data[index] ||= fillEmptyData data, index + 1
+
+    strokeColor = 0
+    for distance in distances
+        distTrendData = []
+        lastBucketVal = null
+        for bucketDate in bucketDates
+            bucket = buckets[bucketDate]
+            secs = bucket[distance]
+            if secs
+                miles = distance / 1609
+                hours = secs / 3600
+                lastBucketVal = Math.round((miles / hours) * 100) / 100
+            distTrendData.push lastBucketVal
+        fillEmptyData distTrendData, 0
+
+        data.datasets.push
+            label: distance
+            fillColor: "rgba(0,0,0,0)"
+            strokeColor: graya strokeColor, 1
+            data: distTrendData
+        strokeColor += 20
+
+    histChart = $("#historicalChart")
+    ctx = histChart.get(0).getContext("2d")
+    if data.datasets.length
+        chart?.destroy()
+        chart = new Chart(ctx).Line data, {
+            animation: false
+            bezierCurve: false
+            pointDot: false
+            responsive: true
+        }
 
 filterRuns = (activities) ->
     activity for activity in activities when activity.type is "Run"
 
-getActivitiesDetails = (activitiesSummaries, callback) ->
-    requests = []
+# Queue up all the details of activities.  When each details is received,
+# call to update the buckets.
+getActivitiesDetails = (activitiesSummaries) ->
     for activity in activitiesSummaries
         ( ->
             curActivity = activity
-            requests.push $.get "https://www.strava.com/api/v3/activities/" + activity.id, { access_token: STRAVA_ACCESS_TOKEN, include_all_efforts: true },
-                ((data) -> $.extend curActivity, data),
+            $.get "https://www.strava.com/api/v3/activities/" + activity.id, { access_token: STRAVA_ACCESS_TOKEN, include_all_efforts: true },
+                ((data) ->
+                    $.extend curActivity, data
+                    detailsUpdated = true
+                    setTimeout (-> (displayBuckets activitiesSummaries)), 0
+                ),
                 "jsonp"
         )()
-    $.when.apply($, requests).done -> callback activitiesSummaries
 
 $(document).ready ->
     if HISTORIES_INDEX?
         if STRAVA_ACCESS_TOKEN
             $.get "https://www.strava.com/api/v3/athlete/activities",
-                { access_token: STRAVA_ACCESS_TOKEN, per_page: 100 },
-                ((data) -> getActivitiesDetails filterRuns(data), ((activities) ->
-                    displayActivities(activities))),
+                { access_token: STRAVA_ACCESS_TOKEN, per_page: 200 },
+                ((data) ->
+                    runs = filterRuns(data)
+                    displayActivities runs
+                    getActivitiesDetails runs
+                ),
                 "jsonp"
