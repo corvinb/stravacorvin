@@ -2,8 +2,16 @@
 # All this logic will automatically be available in application.js.
 # You can use CoffeeScript in this file: http://coffeescript.org/
 
+displayMonthly = true
+
 bucketLabel = (date) ->
-    new Date(date).toLocaleDateString('en-us', { month: 'numeric', day: 'numeric' })
+    options =
+        month: 'numeric'
+        day: 'numeric'
+    if displayMonthly
+        options =
+            month: 'narrow'
+    new Date(date).toLocaleDateString('en-us', options)
 
 displayActivities = (data) ->
     # data is filtered for runs.
@@ -40,7 +48,6 @@ displayAllRuns = (data) ->
     table.append '</tbody>'
 
 # Buckets
-displayMonthly = true
 monthlyBuckets = {}
 weeklyBuckets = {}
 
