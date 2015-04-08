@@ -5,13 +5,19 @@
 displayMonthly = true
 
 bucketLabel = (date) ->
-    options =
-        month: 'numeric'
-        day: 'numeric'
     if displayMonthly
+        date = new Date(date)
+        month = date.getMonth()
+        months = ['J','F','M','A','M','J','J','A','S','O','N','D']
+        label = months[month]
+        if month == 0
+            label += (' ' + date.getFullYear() % 100)
+        return label
+    else
         options =
-            month: 'narrow'
-    new Date(date).toLocaleDateString('en-us', options)
+            month: 'numeric'
+            day: 'numeric'
+        new Date(date).toLocaleDateString('en-us', options)
 
 displayActivities = (data) ->
     # data is filtered for runs.
